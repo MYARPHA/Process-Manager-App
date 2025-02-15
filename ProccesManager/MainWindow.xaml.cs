@@ -1,8 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Security.Principal;
 using System.Windows;
 
 namespace ProccesManager
@@ -17,38 +16,8 @@ namespace ProccesManager
 
         public MainWindow()
         {
-            // Если не админ – перезапускаем приложение с правами администратора
-            if (!IsAdministrator())
-            {
-                try
-                {
-                    ProcessStartInfo proc = new ProcessStartInfo
-                    {
-                        UseShellExecute = true,
-                        WorkingDirectory = Environment.CurrentDirectory,
-                        FileName = Process.GetCurrentProcess().MainModule.FileName,
-                        Verb = "runas" // Запрос прав админа
-                    };
-                    Process.Start(proc);
-                }
-                catch (Exception)
-                {
-                    // Если пользователь отказался или произошла ошибка – закрываем приложение
-                    Application.Current.Shutdown();
-                }
-                Environment.Exit(0);
-            }
-
             InitializeComponent();
             DataContext = this;
-        }
-
-        // Метод для проверки прав администратора
-        private bool IsAdministrator()
-        {
-            WindowsIdentity identity = WindowsIdentity.GetCurrent();
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
 
         // Загрузка информации о процессах
@@ -78,7 +47,8 @@ namespace ProccesManager
         private void LoadApplications()
         {
             Applications.Clear();
-            foreach (var process in Process.GetProcesses().Where(p => !string.IsNullOrWhiteSpace(p.MainWindowTitle)))
+            foreach (var process in Process.GetProcesses().Where(p => !string.IsNullOrWhiteSpace(
+                p.MainWindowTitle)))
             {
                 try
                 {
@@ -102,6 +72,7 @@ namespace ProccesManager
         // Запуск нового процесса
         private void StartNewTask_Click(object sender, RoutedEventArgs e)
         {
+
             var dialog = new TaskStartDialog();
             if (dialog.ShowDialog() == true)
             {
@@ -115,6 +86,7 @@ namespace ProccesManager
                     System.Windows.Forms.MessageBox.Show($"Ошибка: {ex.Message}");
                 }
             }
+
         }
 
         // Закрытие приложения
@@ -133,10 +105,10 @@ namespace ProccesManager
                     var process = Process.GetProcessById(selectedProcess.Id);
                     foreach (var child in Process.GetProcesses().Where(p => p.SessionId == process.SessionId))
                     {
-                        try
+                        try 
                         {
-                            child.Kill();
-                        }
+                            child.Kill(); 
+                        } 
                         catch { }
                     }
                     process.Kill();
