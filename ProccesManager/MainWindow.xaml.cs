@@ -43,28 +43,35 @@ namespace ProccesManager
             DataContext = this;
         }
 
-        // Метод для проверки прав администратора
+        // Исправление 1: Используем using для WindowsIdentity, т.к. он реализует IDisposable
         private bool IsAdministrator()
         {
-            WindowsIdentity identity = WindowsIdentity.GetCurrent();
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+            {
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
         }
 
-        // Загрузка информации о процессах
+        // Исправление 2: Освобождаем каждый объект Process после использования
         private void LoadProcess()
         {
             Processes.Clear();
-            foreach (var process in Process.GetProcesses().OrderBy(p => p.ProcessName))
+            Process[] processList = Process.GetProcesses();
+            foreach (var proc in processList.OrderBy(p => p.ProcessName))
             {
                 try
                 {
-                    Processes.Add(new ProcessInfo
+                    // Оборачиваем процесс в using, чтобы он корректно освободился после чтения свойств
+                    using (proc)
                     {
-                        ProcessName = process.ProcessName,
-                        Id = process.Id,
-                        MemoryUsage = Math.Round(process.WorkingSet64 / 1024 / 1024.0, 2)
-                    });
+                        Processes.Add(new ProcessInfo
+                        {
+                            ProcessName = proc.ProcessName,
+                            Id = proc.Id,
+                            MemoryUsage = Math.Round(proc.WorkingSet64 / 1024 / 1024.0, 2)
+                        });
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -74,19 +81,26 @@ namespace ProccesManager
             StatusTextBlock.Text = $"Запущено процессов: {Processes.Count}";
         }
 
-        // Загрузка информации о приложениях
+        // Исправление 3: Тоже освобождаем объекты Process при загрузке приложений
         private void LoadApplications()
         {
             Applications.Clear();
-            foreach (var process in Process.GetProcesses().Where(p => !string.IsNullOrWhiteSpace(p.MainWindowTitle)))
+            Process[] processList = Process.GetProcesses();
+            foreach (var proc in processList)
             {
                 try
                 {
-                    Applications.Add(new AppInfo
+                    using (proc)
                     {
-                        AppName = process.MainWindowTitle,
-                        StartTime = process.StartTime.ToString("HH:mm:ss")
-                    });
+                        if (!string.IsNullOrWhiteSpace(proc.MainWindowTitle))
+                        {
+                            Applications.Add(new AppInfo
+                            {
+                                AppName = proc.MainWindowTitle,
+                                StartTime = proc.StartTime.ToString("HH:mm:ss")
+                            });
+                        }
+                    }
                 }
                 catch { }
             }
@@ -99,7 +113,7 @@ namespace ProccesManager
             LoadApplications();
         }
 
-        // Запуск нового процесса
+        // Исправление 4: Оборачиваем Process.Start в using, чтобы освобождать возвращаемый объект
         private void StartNewTask_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new TaskStartDialog();
@@ -107,7 +121,14 @@ namespace ProccesManager
             {
                 try
                 {
-                    Process.Start(dialog.ProcessName);
+                    var newProc = Process.Start(dialog.ProcessName);
+                    if (newProc != null)
+                    {
+                        using (newProc)
+                        {
+                            // Запускаем процесс и тут же освобождаем объект
+                        }
+                    }
                     LoadProcess();
                 }
                 catch (Exception ex)
@@ -123,23 +144,30 @@ namespace ProccesManager
             Application.Current.Shutdown();
         }
 
-        // Завершение дерева процессов
+        // Исправление 5: В методе KillProccessTree освобождаем все объекты Process
         private void KillProccessTree_Click(object sender, RoutedEventArgs e)
         {
             if (ViewProcList.SelectedItem is ProcessInfo selectedProcess)
             {
                 try
                 {
-                    var process = Process.GetProcessById(selectedProcess.Id);
-                    foreach (var child in Process.GetProcesses().Where(p => p.SessionId == process.SessionId))
+                    using (var proc = Process.GetProcessById(selectedProcess.Id))
                     {
-                        try
+                        // Получаем список процессов для завершения
+                        Process[] allProcesses = Process.GetProcesses();
+                        foreach (var child in allProcesses.Where(p => p.SessionId == proc.SessionId))
                         {
-                            child.Kill();
+                            try
+                            {
+                                using (child)
+                                {
+                                    child.Kill();
+                                }
+                            }
+                            catch { }
                         }
-                        catch { }
+                        proc.Kill();
                     }
-                    process.Kill();
                     LoadProcess();
                 }
                 catch (Exception ex)
@@ -149,14 +177,17 @@ namespace ProccesManager
             }
         }
 
-        // Завершение процесса
+        // Исправление 6: Освобождаем объект Process после завершения процесса
         private void KillProccess_Click(object sender, RoutedEventArgs e)
         {
             if (ViewProcList.SelectedItem is ProcessInfo selectedProcess)
             {
                 try
                 {
-                    Process.GetProcessById(selectedProcess.Id)?.Kill();
+                    using (var proc = Process.GetProcessById(selectedProcess.Id))
+                    {
+                        proc?.Kill();
+                    }
                     LoadProcess();
                 }
                 catch (Exception ex)
